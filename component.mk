@@ -9,15 +9,15 @@
 
 COMPONENT_SRCDIRS := core espfs util
 COMPONENT_ADD_INCLUDEDIRS := core espfs util include
-COMPONENT_ADD_LDFLAGS := -lwebpages-espfs -llibesphttpd
+COMPONENT_ADD_LDFLAGS := -llibesphttpd
 
 COMPONENT_EXTRA_CLEAN := mkespfsimage/*
 
-include $(IDF_PATH)/make/component_common.mk
 
 HTMLDIR := $(subst ",,$(CONFIG_ESPHTTPD_HTMLDIR))
 
-
+ifeq ("$(CONFIG_ESPHTTPD_ENABLE_ESPFS)","yes")
+COMPONENT_ADD_LDFLAGS += -lwebpages-espfs
 liblibesphttpd.a: libwebpages-espfs.a
 
 webpages.espfs: $(PROJECT_PATH)/$(HTMLDIR) mkespfsimage/mkespfsimage
@@ -49,3 +49,4 @@ mkespfsimage/mkespfsimage: $(COMPONENT_PATH)/espfs/mkespfsimage
 	$(MAKE) -C $(COMPONENT_BUILD_DIR)/mkespfsimage -f $(COMPONENT_PATH)/espfs/mkespfsimage/Makefile \
 		USE_HEATSHRINK="$(USE_HEATSHRINK)" GZIP_COMPRESSION="$(GZIP_COMPRESSION)" BUILD_DIR=$(COMPONENT_BUILD_DIR)/mkespfsimage \
 		CC=$(HOSTCC)
+endif

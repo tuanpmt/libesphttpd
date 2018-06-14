@@ -20,6 +20,12 @@ config ESPHTTPD_HTMLDIR
 	string "Directory (on the build machine) where the static files served by the webserver are"
 	default "html/"
 
+config ESPHTTPD_ENABLE_ESPFS
+	bool "Enable ESPFS"
+	default n
+	help
+		Enable build and link espfs
+
 config ESPHTTPD_USEYUICOMPRESSOR
 	bool "Compress JS/CSS with YUI compressor"
 	default n

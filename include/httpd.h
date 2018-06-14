@@ -23,6 +23,8 @@
 
 #define HTTPD_METHOD_GET 1
 #define HTTPD_METHOD_POST 2
+#define HTTPD_METHOD_SUB 3
+#define HTTPD_METHOD_UNSUB 4
 
 #define HTTPD_TRANSFER_CLOSE 0
 #define HTTPD_TRANSFER_CHUNKED 1
@@ -52,6 +54,7 @@ struct HttpdConnData {
 	int remote_port;		// Remote TCP port
 	uint8_t remote_ip[4];	// IP address of client
 	uint8_t slot;			// Slot ID
+	void *context; 			// Application context
 };
 
 //A struct describing the POST data sent inside the http connection.  This is used by the CGI functions
@@ -79,6 +82,7 @@ void httpdRedirect(HttpdConnData *conn, char *newUrl);
 int httpdUrlDecode(char *val, int valLen, char *ret, int retLen);
 int httpdFindArg(char *line, char *arg, char *buff, int buffLen);
 void httpdInit(HttpdBuiltInUrl *fixedUrls, int port);
+void httpdRegisterHandle(HttpdBuiltInUrl *fixedUrls, void *context);
 const char *httpdGetMimetype(char *url);
 void httdSetTransferMode(HttpdConnData *conn, int mode);
 void httpdStartResponse(HttpdConnData *conn, int code);

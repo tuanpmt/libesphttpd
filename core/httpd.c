@@ -16,8 +16,14 @@ Esp8266 http server - core routines
 #include "httpd.h"
 #include "httpd-platform.h"
 
+typedef struct HttpdBuiltInUrlTree_ {
+    HttpdBuiltInUrl *ptr;
+    struct HttpdBuiltInUrlTree_ *next;
+    void *context;
+} HttpdBuiltInUrlTree;
+
 //This gets set at init time.
-static HttpdBuiltInUrl *builtInUrls;
+static HttpdBuiltInUrlTree *builtInUrlTrees = NULL;
 
 typedef struct HttpSendBacklogItem HttpSendBacklogItem;
 
@@ -526,28 +532,31 @@ static void ICACHE_FLASH_ATTR httpdProcessRequest(HttpdConnData *conn) {
 	//See if we can find a CGI that's happy to handle the request.
 	while (1) {
 		//Look up URL in the built-in URL table.
-		while (builtInUrls[i].url!=NULL) {
-			int match=0;
-			//See if there's a literal match
-			if (strcmp(builtInUrls[i].url, conn->url)==0) match=1;
-			//See if there's a wildcard match
-			if (builtInUrls[i].url[strlen(builtInUrls[i].url)-1]=='*' &&
-					strncmp(builtInUrls[i].url, conn->url, strlen(builtInUrls[i].url)-1)==0) match=1;
-			if (match) {
-				httpd_printf("Is url index %d\n", i);
-				conn->cgiData=NULL;
-				conn->cgi=builtInUrls[i].cgiCb;
-				conn->cgiArg=builtInUrls[i].cgiArg;
-				break;
-			}
-			i++;
-		}
-		if (builtInUrls[i].url==NULL) {
-			//Drat, we're at the end of the URL table. This usually shouldn't happen. Well, just
-			//generate a built-in 404 to handle this.
-			httpd_printf("%s not found. 404!\n", conn->url);
-			conn->cgi=cgiNotFound;
-		}
+		HttpdBuiltInUrlTree *tree = builtInUrlTrees;
+        int match=0;
+        while (tree->next!=NULL) {
+            tree = tree->next;
+            //See if there's a literal match
+            if (strcmp(tree->ptr->url, conn->url)==0) match=1;
+            //See if there's a wildcard match
+            if (tree->ptr->url[strlen(tree->ptr->url)-1]=='*' &&
+                    strncmp(tree->ptr->url, conn->url, strlen(tree->ptr->url)-1)==0) match=1;
+            if (match) {
+                httpd_printf("Is url index %d\n", i);
+                conn->cgiData=NULL;
+                conn->cgi=tree->ptr->cgiCb;
+                conn->cgiArg=tree->ptr->cgiArg;
+                conn->context = tree->context;
+                break;
+            }
+            i++;
+        }
+        if (match == 0) {
+            //Drat, we're at the end of the URL table. This usually shouldn't happen. Well, just
+            //generate a built-in 404 to handle this.
+            httpd_printf("%s not found. 404!\n", conn->url);
+            conn->cgi=cgiNotFound;
+        }
 		
 		//Okay, we have a CGI function that matches the URL. See if it wants to handle the
 		//particular URL we're supposed to handle.
@@ -588,7 +597,13 @@ static void ICACHE_FLASH_ATTR httpdParseHeader(char *h, HttpdConnData *conn) {
 	} else if (strncmp(h, "POST ", 5)==0) {
 		conn->requestType = HTTPD_METHOD_POST;
 		firstLine=1;
-	}
+	} else if (strncmp(h, "SUBSCRIBE ", 10)==0) {
+        conn->requestType = HTTPD_METHOD_SUB;
+        firstLine=1;
+    } else if (strncmp(h, "UNSUBSCRIBE ", 12)==0) {
+        conn->requestType = HTTPD_METHOD_UNSUB;
+        firstLine=1;
+    }
 
 	if (firstLine) {
 		char *e;
@@ -845,8 +860,38 @@ void ICACHE_FLASH_ATTR httpdInit(HttpdBuiltInUrl *fixedUrls, int port) {
 	for (i=0; i<HTTPD_MAX_CONNECTIONS; i++) {
 		connData[i]=NULL;
 	}
-	builtInUrls=fixedUrls;
+
+	builtInUrlTrees = calloc(1, sizeof(HttpdBuiltInUrlTree));
+	
+	if (builtInUrlTrees == NULL) {
+		httpd_printf("Out of memory\n");
+		return;
+	}
+	httpdRegisterHandle(fixedUrls, NULL);
 
 	httpdPlatInit(port, HTTPD_MAX_CONNECTIONS);
 	httpd_printf("Httpd init\n");
+}
+
+void ICACHE_FLASH_ATTR httpdRegisterHandle(HttpdBuiltInUrl *fixedUrls, void *context)
+{
+	if (fixedUrls == NULL) {
+		return;
+	}
+	int i = 0;
+	HttpdBuiltInUrlTree *tree = builtInUrlTrees;
+
+	while(fixedUrls[i].url != NULL) {
+	    while (tree->next != NULL) {
+	        tree = tree->next;
+	    }
+	    tree->next = calloc(1, sizeof(HttpdBuiltInUrlTree));
+	    if (tree->next == NULL) {
+	    	httpd_printf("Out of memory\n");
+	    	break;
+	    }
+	    ((HttpdBuiltInUrlTree*)tree->next)->ptr = &fixedUrls[i];
+	    ((HttpdBuiltInUrlTree*)tree->next)->context = context;
+	    i++;
+	}
 }
